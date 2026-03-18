@@ -2,83 +2,67 @@
 set -euo pipefail
 
 SKILL_NAME="doc-governance-writing"
-DEFAULT_REPO_URL="${DOC_SKILL_REPO_URL:-https://github.com/<your-org>/skill-doc-governance-writing.git}"
-HUB_DIR="${SKILLS_HUB_DIR:-$HOME/.trae/skills-hub}"
-REGISTRY_FILE="$HUB_DIR/projects.list"
+DEFAULT_REPO_URL="${DOC_SKILL_REPO_URL:-https://github.com/jinghai/skill-doc-governance-writing.git}"
+PROJECT_DIR="${PROJECT_DIR:-$PWD}"
+PROJECT_DIR="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$PROJECT_DIR")"
+SUBMODULE_PATH=".trae/skills/$SKILL_NAME"
 
 realpath_f() {
   python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
-ensure_hub() {
-  mkdir -p "$HUB_DIR"
-  touch "$REGISTRY_FILE"
+ensure_repo_root() {
+  git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null
 }
 
-normalize_project() {
-  local input="${1:-$PWD}"
-  realpath_f "$input"
+ensure_skills_dir() {
+  mkdir -p "$PROJECT_DIR/.trae/skills"
 }
 
-register_project() {
-  local project
-  project="$(normalize_project "${1:-$PWD}")"
-  ensure_hub
-  if ! grep -Fxq "$project" "$REGISTRY_FILE"; then
-    echo "$project" >>"$REGISTRY_FILE"
+submodule_exists() {
+  git -C "$PROJECT_DIR" config -f .gitmodules --get-regexp "^submodule\\.${SUBMODULE_PATH//\//\\.}\\.path$" >/dev/null 2>&1
+}
+
+cleanup_index_path() {
+  if git -C "$PROJECT_DIR" ls-files --error-unmatch "$SUBMODULE_PATH" >/dev/null 2>&1 || git -C "$PROJECT_DIR" ls-files "$SUBMODULE_PATH/*" | grep -q .; then
+    git -C "$PROJECT_DIR" rm -r --cached --ignore-unmatch "$SUBMODULE_PATH" >/dev/null
   fi
 }
 
-link_one() {
-  local project="$1"
-  local source="$HUB_DIR/$SKILL_NAME"
-  local target="$project/.trae/skills/$SKILL_NAME"
-  if [[ ! -d "$source" ]]; then
-    echo "Skill not installed in hub: $SKILL_NAME" >&2
-    exit 1
+backup_path_if_needed() {
+  local abs_path="$PROJECT_DIR/$SUBMODULE_PATH"
+  if [[ -L "$abs_path" ]]; then
+    rm "$abs_path"
+    return
   fi
-  mkdir -p "$project/.trae/skills"
-  if [[ -e "$target" && ! -L "$target" ]]; then
-    mv "$target" "${target}.bak.$(date +%s)"
+  if [[ -d "$abs_path" && ! -d "$abs_path/.git" ]]; then
+    mv "$abs_path" "${abs_path}.bak.$(date +%s)"
   fi
-  ln -sfn "$source" "$target"
 }
 
-install_skill() {
+init_submodule() {
   local repo_url="${1:-$DEFAULT_REPO_URL}"
-  ensure_hub
-  local dest="$HUB_DIR/$SKILL_NAME"
-  if [[ -d "$dest/.git" ]]; then
-    git -C "$dest" pull --ff-only
-  elif [[ -d "$dest" ]]; then
-    echo "Destination exists but not a git repo: $dest" >&2
-    exit 1
+  ensure_repo_root
+  ensure_skills_dir
+  backup_path_if_needed
+  cleanup_index_path
+  if submodule_exists; then
+    git -C "$PROJECT_DIR" submodule sync -- "$SUBMODULE_PATH"
+    git -C "$PROJECT_DIR" submodule update --init --recursive -- "$SUBMODULE_PATH"
   else
-    git clone "$repo_url" "$dest"
+    git -C "$PROJECT_DIR" submodule add "$repo_url" "$SUBMODULE_PATH"
   fi
-  register_project "$PWD"
-  link_one "$(normalize_project "$PWD")"
 }
 
-update_skill() {
-  local dest="$HUB_DIR/$SKILL_NAME"
-  if [[ ! -d "$dest/.git" ]]; then
-    echo "Skill not installed: $SKILL_NAME" >&2
-    exit 1
-  fi
-  git -C "$dest" pull --ff-only
-  if [[ -f "$REGISTRY_FILE" ]]; then
-    while IFS= read -r project; do
-      [[ -z "$project" ]] && continue
-      [[ ! -d "$project" ]] && continue
-      link_one "$project"
-    done <"$REGISTRY_FILE"
-  fi
+update_submodule() {
+  ensure_repo_root
+  git -C "$PROJECT_DIR" submodule sync -- "$SUBMODULE_PATH"
+  git -C "$PROJECT_DIR" submodule update --init --recursive --remote -- "$SUBMODULE_PATH"
 }
 
 export_repo() {
   local output_root="$1"
-  local source="$PWD/.trae/skills/$SKILL_NAME"
+  local source="$PROJECT_DIR/.trae/skills/$SKILL_NAME"
   if [[ ! -e "$source" ]]; then
     echo "Skill not found in current project: $source" >&2
     exit 1
@@ -91,25 +75,20 @@ export_repo() {
 }
 
 doctor() {
-  ensure_hub
+  ensure_repo_root
   echo "SKILL_NAME=$SKILL_NAME"
-  echo "HUB_DIR=$HUB_DIR"
-  echo "REGISTRY_FILE=$REGISTRY_FILE"
+  echo "PROJECT_DIR=$PROJECT_DIR"
+  echo "SUBMODULE_PATH=$SUBMODULE_PATH"
   echo "DEFAULT_REPO_URL=$DEFAULT_REPO_URL"
-  if [[ -d "$HUB_DIR/$SKILL_NAME" ]]; then
-    echo "Installed: yes"
-  else
-    echo "Installed: no"
-  fi
+  git -C "$PROJECT_DIR" submodule status -- "$SUBMODULE_PATH" || true
+  ls -ld "$PROJECT_DIR/$SUBMODULE_PATH" || true
 }
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh install [repo-url]
+  bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh init [repo-url]
   bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh update-all
-  bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh link [project-path]
-  bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh register-project [project-path]
   bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh export-repo <output-root>
   bash ./.trae/skills/doc-governance-writing/tools/doc-skillctl.sh doctor
 EOF
@@ -118,20 +97,11 @@ EOF
 main() {
   local cmd="${1:-}"
   case "$cmd" in
-    install)
-      install_skill "${2:-}"
+    init)
+      init_submodule "${2:-}"
       ;;
     update-all)
-      update_skill
-      ;;
-    link)
-      local project="${2:-$PWD}"
-      project="$(normalize_project "$project")"
-      register_project "$project"
-      link_one "$project"
-      ;;
-    register-project)
-      register_project "${2:-$PWD}"
+      update_submodule
       ;;
     export-repo)
       [[ $# -lt 2 ]] && usage && exit 1
