@@ -12,12 +12,14 @@ description: "Use when writing or reorganizing PRD/SRS/HLD/LLD docs to enforce a
 ## When To Use
 - 用户提到 PRD、SRS、HLD、LLD 编写或补全
 - 用户提到“文档整理”“设计文档归档”“审计”“评审”
+- 用户仅说“整理文档”“归档”但未限定目录，且仓库内存在设计类文档散落场景
 - 用户要求将文档与源码一致、可追溯、可发布
 - 用户要求输出到 `docs/design` 或类似交付目录
 
 ## Boundary
 - 本技能聚焦 `docs/design` 交付层，不负责 `docs/项目规范` 的主规范治理。
 - 涉及项目规范治理时，先调用 `project-governance-execution`。
+- 用户同时提到“提交工作区”“归档计划”“整理链接”时，这些都属于收尾动作，不得覆盖 `docs/design` 交付主目标。
 
 ## Portability Mode
 - 本技能采用 `local-first` 资产包模式，避免跨项目复制后失效。
@@ -68,6 +70,8 @@ description: "Use when writing or reorganizing PRD/SRS/HLD/LLD docs to enforce a
 - `PUBLISH_CHECKLIST.md`（发布前门禁）
 - `REVIEW_CHECKLIST.md`（评审结论）
 
+若源文档散落于 `需求/`、`docs/` 其他目录、`README` 链接或专题目录，必须先建立来源清单与归位映射，再迁移或重组到 `docs/design`。
+
 ## Directory Standard
 ```text
 docs/design/
@@ -106,11 +110,13 @@ docs/design/
 
 ## Execution Checklist
 1. 执行 Bootstrap Gate，确保模板资产可用
-2. 盘点现有文档与缺口
-3. 按分层目录重排文档
-4. 补齐治理文档四件套
-5. 抽样核对源码一致性
-6. 更新发布与评审状态
+2. 盘点仓库内现有设计文档、需求文档、专题文档与 README 链接中的候选来源
+3. 建立候选来源到 PRD/SRS/HLD/LLD 的归类与归位映射
+4. 按分层目录重排文档；若 `docs/design` 不存在，先建标准结构再迁移内容
+5. 补齐治理文档四件套
+6. 抽样核对源码一致性
+7. 更新发布与评审状态
+8. 若任务包含“提交”“归档”“更新索引”，仅可在上述交付完成后作为收尾执行
 
 ## Common Mistakes
 - 只写内容不建治理文档
@@ -119,8 +125,15 @@ docs/design/
 - 发布前未填写评审和出版清单
 - 复制技能到新仓库后，跳过模板初始化直接开写
 - 在未挂载技能的项目里直接调用工具脚本
+- 仅修改 README 链接或目录索引，就宣称完成文档整理
+- 仅移动文件到 `archive/`，未建立 `docs/design` 分层交付
+- 仅更新规则文件、技能文件或提交说明，未完成设计文档治理
+- 用户说“整理文档并提交”时，先提交已有工作区，导致主任务被提交动作覆盖
 
 ## Done Criteria
 - 文档可被审计快速定位
 - 文档可被研发直接执行
 - 需求到代码存在显式追溯链路
+- `docs/design` 分层目录与治理四件套齐备，或对缺失项有显式登记
+- 已存在设计类原始文档时，来源清单与归位映射清晰可追溯
+- 仅当分层交付完成后，归档、索引更新、提交工作区才可视为完成收尾
